@@ -19,18 +19,27 @@ $ npm install node-lightify
 var lightify = require('lightify');
 
 lightify.start('x.x.x.x').then(function(data){
-    lightify.discovery().then(function(data) {
-    }
-})
+    return lightify.discovery();
+}).then(function(data) {
+    console.log(data.result)
+}
 ```
 
 ## API
-* start   connect to lightify gateway using tcp port 4000
-* discovery  discover Zigbee devices connected to the gateway
-* light_on_off  turn light on or off
-* light_brightness adjust light brightness
-* light_temperature  adjust light temperature
-* light_color        change light color
+* start
+  + connect to lightify gateway using tcp port 4000
+* discovery
+  + discover Zigbee devices connected to the gateway
+* zone_discovery
+  + discover zones defined on the gateway
+* node_on_off
+  + turn light on or off
+* node_brightness
+  + adjust light brightness
+* node_temperature
+  + adjust light temperature
+* node_color
+  + change light color
 
 
 ## Contributing

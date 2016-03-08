@@ -2,7 +2,8 @@ var net = require('net');
 var moment = require('moment');
 var Promise = require('promise');
 
-var COMMAND_ALL_LIGHT_STATUS = 0x13;
+var COMMAND_LIST_ALL_NODE = 0x13;
+var COMMAND_LIST_ALL_ZONE = 0x1E;
 var COMMAND_BRIGHTNESS = 0x31;
 var COMMAND_ONOFF = 0x32;
 var COMMAND_TEMP = 0x33;
@@ -10,16 +11,14 @@ var COMMAND_COLOR = 0x36;
 
 
 var commands = [];
-var lights = [];
-
 
 var seq = 0;
 var client;
-function create_command(cmd, body) {
+function create_command(cmd, body, flag) {
     var buffer = new Buffer(8 + body.length);
     buffer.fill(0);
     buffer.writeUInt16LE(8 + body.length - 2, 0);// length
-    buffer.writeUInt8(0x00, 2); // Flag, 0:node, 2:zone
+    buffer.writeUInt8(flag || 0x00, 2); // Flag, 0:node, 2:zone
     buffer.writeUInt8(cmd, 3);
     buffer.writeUInt32LE(++seq, 4); // request id
     body.copy(buffer, 8);
@@ -36,21 +35,29 @@ function create_command(cmd, body) {
 
 
 function start(ip) {
-    client = new net.Socket();
-    var left_over = '';
-    client.on('data', (data) => {
-        var seq = data.readUInt32LE(4);
-        for(var i = 0; i < commands.length; i++) {
-            if(commands[i].seq === seq) {
-                if(!commands[i].processer || !commands[i].processer(commands[i], data)) {
-                    commands.splice(i, 1);
-                }
-                break;
-            }
-        }
-    });
     return new Promise(function(resolve, reject) {
-        client.connect(4000, ip, function () {
+        client = new net.Socket();
+        connectTimer = setTimeout(function () {
+            reject('timeout');
+            client.destroy();
+        }, 100);
+        client.on('data', function(data) {
+            var seq = data.readUInt32LE(4);
+            for(var i = 0; i < commands.length; i++) {
+                if(commands[i].seq === seq) {
+                    if(!commands[i].processer || !commands[i].processer(commands[i], data)) {
+                        commands.splice(i, 1);
+                    }
+                    break;
+                }
+            }
+        });
+
+        client.on('error', function(error) {
+            
+        });
+        client.connect(4000, ip, function() {
+            clearTimeout(connectTimer);
             resolve();
         });
     });
@@ -70,27 +77,27 @@ function responseProcesser(data, status_len, single_result_cb) {
 }
 function successResponseProcesser(cmd, data) {
     var self = this;
-    var lights = responseProcesser(data, 9, function(pos) {
+    var result = responseProcesser(data, 9, function(pos) {
         return {
             mac : data.readDoubleLE(pos, 8),
             success : data.readUInt8(pos + 8)
         };
     });
-    if(lights instanceof Array) {
+    if(result instanceof Array) {
         self.resolve({
-            lights,
+            result,
             request: cmd.buffer.toString('hex'),
             response: data.toString('hex')
         });
     } else {
-        self.reject(lights);
+        self.reject(result);
     }
 }
 function discovery() {
     return new Promise(function(resolve, reject) {
-        var cmd = create_command(COMMAND_ALL_LIGHT_STATUS, new Buffer([0x1]))
+        var cmd = create_command(COMMAND_LIST_ALL_NODE, new Buffer([0x1]))
         .setprocesser(function(_, data) {
-            lights = responseProcesser(data, 50, function(pos) {
+            result = responseProcesser(data, 50, function(pos) {
                 for(var j = pos + 26; j < pos + 50; j++) {
                     if(data[j] === 0){
                         break;
@@ -114,14 +121,14 @@ function discovery() {
                 };
                 
             });
-            if(lights instanceof Array) {
+            if(result instanceof Array) {
                 resolve({
-                    lights,
+                    result,
                     request: cmd.buffer.toString('hex'),
                     response: data.toString('hex')
                 });
             } else {
-                reject(lights);
+                reject(result);
             }
         });
         commands.push(cmd);
@@ -129,7 +136,38 @@ function discovery() {
     });
 }
 
-function light_on_off(mac, on) {
+function zone_discovery() {
+    return new Promise(function(resolve, reject) {
+        var cmd = create_command(COMMAND_LIST_ALL_ZONE, new Buffer([0x0]), 2)
+        .setprocesser(function(_, data) {
+            result = responseProcesser(data, 18, function(pos) {
+                for(var j = pos + 2; j < pos + 18; j++) {
+                    if(data[j] === 0){
+                        break;
+                    }
+                }
+                return {
+                    id : data.readUInt16LE(pos),
+                    name : data.toString('utf-8', pos + 2, j)
+                };
+                
+            });
+            if(result instanceof Array) {
+                resolve({
+                    result,
+                    request: cmd.buffer.toString('hex'),
+                    response: data.toString('hex')
+                });
+            } else {
+                reject(result);
+            }
+        });
+        commands.push(cmd);
+        client.write(cmd.buffer);
+    });
+}
+
+function node_on_off(mac, on) {
     return new Promise(function(resolve, reject) {
         var body = new Buffer(9);
         body.fill(0);
@@ -143,7 +181,7 @@ function light_on_off(mac, on) {
     });
 }
 
-function light_brightness(mac, brightness, step_time, log) {
+function node_brightness(mac, brightness, step_time) {
     return new Promise(function(resolve, reject) {
         var buffer = new Buffer(11);
         buffer.fill(0);
@@ -157,7 +195,7 @@ function light_brightness(mac, brightness, step_time, log) {
     });
 }
 
-function light_temperature(mac, temperature, step_time, log) {
+function node_temperature(mac, temperature, step_time) {
     return new Promise(function(resolve, reject) {
         var buffer = new Buffer(12);
         buffer.fill(0);
@@ -171,7 +209,7 @@ function light_temperature(mac, temperature, step_time, log) {
     });
 }
 
-function light_color(mac, red, green, blue, alpha, step_time, log) {
+function node_color(mac, red, green, blue, alpha, step_time) {
     return new Promise(function(resolve, reject) {
         var buffer = new Buffer(14);
         buffer.fill(0);
@@ -191,7 +229,7 @@ function light_color(mac, red, green, blue, alpha, step_time, log) {
 function isPlug(type) {
     return type === 16;
 }
-function getLightType(type) {
+function getNodeType(type) {
     return isPlug(type) ? 16 : type;
 }
 function isSwitch(type) {
@@ -200,14 +238,17 @@ function isSwitch(type) {
 var exports = module.exports = {
     start,
     discovery,
-    light_on_off,
-    light_brightness,
+    zone_discovery,
+    node_on_off,
+    node_brightness,
+    node_temperature,
+    node_color,
     isPlug,
     isSwitch,
     is2BSwitch : function(type) { return type === 64;},
     is4BSwitch : function(type) { return type === 65;},
-    isBrightnessSupported : function(type) { return getLightType(type) === 2 || getLightType(type) === 4 || (getLightType(type) != 16 && getLightType(type) != 1);},
-    isColorSupported : function(type) { return getLightType(type) === 10 || getLightType(type) === 8; },
-    isLight : function(type) { return !isSwitch(type) && !isPlug(type); },
-    isTemperatureSupported : function(type) {return getLightType(type) === 2 || getLightType(type) === 10; }
+    isBrightnessSupported : function(type) { return getNodeType(type) === 2 || getNodeType(type) === 4 || (getNodeType(type) != 16 && getNodeType(type) != 1);},
+    isTemperatureSupported : function(type) {return getNodeType(type) === 2 || getNodeType(type) === 10; },
+    isColorSupported : function(type) { return getNodeType(type) === 10 || getNodeType(type) === 8; },
+    isLight : function(type) { return !isSwitch(type) && !isPlug(type); }
 };
