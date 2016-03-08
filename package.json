@@ -1,0 +1,23 @@
+{
+  "name": "node-lightify",
+  "version": "0.0.1",
+  "description": "lightify node module",
+  "license": "BSD",
+  "keywords": [
+    "node", "osram", "lightify"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/rainlake/node-lightify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rainlake/node-lightify/issues"
+  },
+  "engines": {
+    "node": ">=0.12.0"
+  },
+  "dependencies": {
+    "promise": ">=7.1.1",
+    "moment": ">=2.4.0"
+  }
+}
