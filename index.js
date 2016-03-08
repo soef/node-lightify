@@ -45,15 +45,15 @@ function create_brightness(mac, brightness, step_time) {
     buffer.fill(0);
     buffer.writeDoubleLE(mac, 0);
     buffer.writeUInt8(brightness, 8);
-    buffer.writeUInt16(step_time, 9);
+    buffer.writeUInt16LE(step_time || 0, 9);
     return create_command(COMMAND_BRIGHTNESS, buffer);
 }
 function create_temperature(mac, temperature, step_time) {
     var buffer = new Buffer(12);
     buffer.fill(0);
     buffer.writeDoubleLE(mac, 0);
-    buffer.writeUInt16(temperature, 8);
-    buffer.writeUInt16(step_time, 10);
+    buffer.writeUInt16LE(temperature, 8);
+    buffer.writeUInt16LE(step_time || 0, 10);
     return create_command(COMMAND_TEMP, buffer);
 }
 
@@ -65,7 +65,7 @@ function create_color(mac, red, green, blue, alpha, step_time) {
     buffer.writeUInt8(green, 9);
     buffer.writeUInt8(blue, 10);
     buffer.writeUInt8(alpha, 11);
-    buffer.writeUInt16(step_time, 12);
+    buffer.writeUInt16LE(step_time || 0, 12);
     return create_command(COMMAND_COLOR, buffer);
 }
 
@@ -169,6 +169,40 @@ function light_on_off(mac, on) {
     });
 }
 
+function light_brightness(mac, brightness, log) {
+    return new Promise(function(resolve, reject) {
+        var cmd = create_brightness(mac, brightness);
+        cmd.processer = function(_, data) {
+            var fail = data.readUInt8(8);
+            if(fail) {
+                reject();
+                return;
+            }
+            if(log)
+                log.debug(data);
+            var num = data.readUInt16LE(9);
+            var status_len = 9;
+            var lights = [];
+            for(var i = 0; i < num; i++) {
+                var pos = 11 + i * status_len;
+                var mac = data.readDoubleLE(pos, 8);
+                var success = data.readUInt8(pos + 8);
+                lights.push({
+                    mac,
+                    success
+                });
+            }
+            resolve({
+                lights,
+                request: cmd.buffer.toString('hex'),
+                response: data.toString('hex')
+            });
+        }
+        commands.push(cmd);
+        client.write(cmd.buffer);
+    });
+}
+
 function isPlug(type) {
     return type === 16;
 }
@@ -182,6 +216,7 @@ var exports = module.exports = {
     start,
     discovery,
     light_on_off,
+    light_brightness,
     isPlug,
     isSwitch,
     is2BSwitch : function(type) { return type === 64;},
