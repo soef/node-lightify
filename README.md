@@ -25,18 +25,18 @@ lightify.start('x.x.x.x').then(function(data){
 ```
 
 ## API
-start   connect to lightify gateway using tcp port 4000
-discovery  discover Zigbee devices connected to the gateway
-light_on_off  turn light on or off
-light_brightness adjust light brightness
-light_temperature  adjust light temperature
-light_color        change light color
+* start   connect to lightify gateway using tcp port 4000
+* discovery  discover Zigbee devices connected to the gateway
+* light_on_off  turn light on or off
+* light_brightness adjust light brightness
+* light_temperature  adjust light temperature
+* light_color        change light color
 
 
 ## Contributing
 
-Contributions are very welcome! Please note that by submitting a pull request for this project, you agree to license your contribution under the [MIT License](https://github.com/rainlake/lightify/blob/master/LICENSE) to this project.
+Contributions are very welcome! Please note that by submitting a pull request for this project, you agree to license your contribution under the [MIT License](https://github.com/rainlake/node-lightify/blob/master/LICENSE) to this project.
 
 ## License
 
-Published under the [MIT License](https://github.com/rainlake/lightify/blob/master/LICENSE).
+Published under the [MIT License](https://github.com/rainlake/node-lightify/blob/master/LICENSE).
