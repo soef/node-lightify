@@ -34,7 +34,7 @@ function create_command(cmd, body, flag) {
 }
 
 
-function start(ip) {
+function start(ip, onError) {
     return new Promise(function(resolve, reject) {
         client = new net.Socket();
         connectTimer = setTimeout(function () {
@@ -54,7 +54,9 @@ function start(ip) {
         });
 
         client.on('error', function(error) {
-            
+            if(onError) {
+                onError(error);
+            }
         });
         client.connect(4000, ip, function() {
             clearTimeout(connectTimer);
