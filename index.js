@@ -23,8 +23,8 @@ function create_command(cmd, body, flag) {
     buffer.writeUInt32LE(++seq, 4); // request id
     body.copy(buffer, 8);
     return {
-        seq,
-        buffer,
+        seq : seq,
+        buffer : buffer,
         createTime : moment().format('x'),
         setprocesser : function(cb) {
             this.processer = cb;
@@ -87,7 +87,7 @@ function successResponseProcesser(cmd, data) {
     });
     if(result instanceof Array) {
         self.resolve({
-            result,
+            result : result,
             request: cmd.buffer.toString('hex'),
             response: data.toString('hex')
         });
@@ -125,7 +125,7 @@ function discovery() {
             });
             if(result instanceof Array) {
                 resolve({
-                    result,
+                    result : result,
                     request: cmd.buffer.toString('hex'),
                     response: data.toString('hex')
                 });
@@ -156,7 +156,7 @@ function zone_discovery() {
             });
             if(result instanceof Array) {
                 resolve({
-                    result,
+                    result: result,
                     request: cmd.buffer.toString('hex'),
                     response: data.toString('hex')
                 });
@@ -176,7 +176,7 @@ function node_on_off(mac, on) {
         body.writeDoubleLE(mac, 0);
         body.writeUInt8(on ? 1 : 0, 8);
         var cmd = create_command(COMMAND_ONOFF, body)
-            .setprocesser(successResponseProcesser.bind({resolve, reject}));
+            .setprocesser(successResponseProcesser.bind({resolve : resolve, reject : reject}));
 
         commands.push(cmd);
         client.write(cmd.buffer);
@@ -191,7 +191,7 @@ function node_brightness(mac, brightness, step_time) {
         buffer.writeUInt8(brightness, 8);
         buffer.writeUInt16LE(step_time || 0, 9);
         var cmd = create_command(COMMAND_BRIGHTNESS, buffer)
-            .setprocesser(successResponseProcesser.bind({resolve, reject}));
+            .setprocesser(successResponseProcesser.bind({resolve : resolve, reject : reject}));
         commands.push(cmd);
         client.write(cmd.buffer);
     });
@@ -205,7 +205,7 @@ function node_temperature(mac, temperature, step_time) {
         buffer.writeUInt16LE(temperature, 8);
         buffer.writeUInt16LE(step_time || 0, 10);
         var cmd = create_command(COMMAND_TEMP, buffer)
-            .setprocesser(successResponseProcesser.bind({resolve, reject}));
+            .setprocesser(successResponseProcesser.bind({resolve : resolve, reject : reject}));
         commands.push(cmd);
         client.write(cmd.buffer);
     });
@@ -222,7 +222,7 @@ function node_color(mac, red, green, blue, alpha, step_time) {
         buffer.writeUInt8(alpha, 11);
         buffer.writeUInt16LE(step_time || 0, 12);
         var cmd = create_command(COMMAND_COLOR, buffer)
-            .setprocesser(successResponseProcesser.bind({resolve, reject}));
+            .setprocesser(successResponseProcesser.bind({resolve : resolve, reject : reject}));
         commands.push(cmd);
         client.write(cmd.buffer);
     });
@@ -238,15 +238,15 @@ function isSwitch(type) {
     return type === 64 || type === 65;
 }
 var exports = module.exports = {
-    start,
-    discovery,
-    zone_discovery,
-    node_on_off,
-    node_brightness,
-    node_temperature,
-    node_color,
-    isPlug,
-    isSwitch,
+    start: start,
+    discovery : discovery,
+    zone_discovery : zone_discovery,
+    node_on_off : node_on_off,
+    node_brightness : node_brightness,
+    node_temperature : node_temperature,
+    node_color : node_color,
+    isPlug : isPlug,
+    isSwitch : isSwitch,
     is2BSwitch : function(type) { return type === 64;},
     is4BSwitch : function(type) { return type === 65;},
     isBrightnessSupported : function(type) { return getNodeType(type) === 2 || getNodeType(type) === 4 || (getNodeType(type) != 16 && getNodeType(type) != 1);},
