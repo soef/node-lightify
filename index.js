@@ -40,7 +40,7 @@ function start(ip, onError) {
         connectTimer = setTimeout(function () {
             reject('timeout');
             client.destroy();
-        }, 100);
+        }, 1000);
         client.on('data', function(data) {
             var seq = data.readUInt32LE(4);
             for(var i = 0; i < commands.length; i++) {
