@@ -247,11 +247,11 @@ function get_status(mac) {
     var body = defaultBuffer(mac, 8);
     return sendCommand(COMMAND_GET_STATUS, body, function(data, pos) {
         var o = {
-            id: data.readDoubleLE(11, 8),
-            error: data.readUInt8(19),
+            mac: data.readDoubleLE(11, 8),
+            requestStatus: data.readUInt8(19),
             online: 0
         }
-        if (o.error != 0xFF) {
+        if (o.requestStatus == 0x00) { //0xFF) {
             o.online = data.readUInt8(20);
             o.status = data.readUInt8(21);
             o.brightness = data.readUInt8(22);
