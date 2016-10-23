@@ -282,7 +282,7 @@ function node_brightness(mac, brightness, step_time) {
 }
 
 function node_temperature(mac, temperature, step_time) {
-    var buffer = defautBuffer(mac, 12);
+    var buffer = defaultBuffer(mac, 12);
     buffer.writeUInt16LE(temperature, 8);
     buffer.writeUInt16LE(step_time || 0, 10);
     return sendCommand(COMMAND_TEMP, buffer);
