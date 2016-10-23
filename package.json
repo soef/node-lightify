@@ -1,10 +1,12 @@
 {
   "name": "node-lightify",
-  "version": "0.0.6",
+  "version": "0.0.9",
   "description": "lightify node module",
   "license": "BSD",
   "keywords": [
-    "node", "osram", "lightify"
+    "node",
+    "osram",
+    "lightify"
   ],
   "repository": {
     "type": "git",
