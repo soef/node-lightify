@@ -1,6 +1,6 @@
 {
   "name": "node-lightify-soef",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "lightify node module",
   "license": "BSD",
   "keywords": [
@@ -22,5 +22,6 @@
   "dependencies": {
     "promise": ">=7.1.1",
     "moment": ">=2.4.0"
-  }
+  },
+  "readmeFilename": "README.md"
 }

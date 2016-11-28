@@ -112,7 +112,8 @@ function start(ip, onError, debug) {
     if (debug != undefined) __DEBUG__ = debug;
     return new Promise(function(resolve, reject) {
         client = new net.Socket();
-        connectTimer = setTimeout(function () {
+        var oTimeout;
+        var connectTimer = setTimeout(function () {
             reject('timeout');
             client.destroy();
         }, 1000);
@@ -131,7 +132,19 @@ function start(ip, onError, debug) {
         client.on('error', function(error) {
             if(onError) {
                 onError(error);
+                return;
             }
+            switch (error.errno) { //error.code
+                case 'ETIMEDOUT':
+                case 'ECONNRESET':
+                case 'EPIPE':
+                    if (oTimeout) clearTimeout(oTimeout);
+                    oTimeout = setTimeout(function() {
+                        client.destroy();
+                        client.connect(4000, ip);
+                    }, 3000);
+                    break;
+            };
         });
         client.connect(4000, ip, function() {
             clearTimeout(connectTimer);
@@ -139,6 +152,7 @@ function start(ip, onError, debug) {
         });
     });
 }
+
 function responseProcesser(data, status_len, single_result_cb) {
     var fail = data.readUInt8(8);
     if(fail) {
@@ -272,7 +286,8 @@ function get_status(mac) {
 
 function close() {
     if (client) {
-        client.close();
+        //client.close();
+        client.destroy();
         client = null;
     }
 }
