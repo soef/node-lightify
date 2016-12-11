@@ -112,7 +112,8 @@ function start(ip, onError, debug) {
     if (debug != undefined) __DEBUG__ = debug;
     return new Promise(function(resolve, reject) {
         client = new net.Socket();
-        connectTimer = setTimeout(function () {
+        var oTimeout;
+        var connectTimer = setTimeout(function () {
             reject('timeout');
             client.destroy();
         }, 1000);
@@ -131,7 +132,19 @@ function start(ip, onError, debug) {
         client.on('error', function(error) {
             if(onError) {
                 onError(error);
+                return;
             }
+            switch (error.errno) { //error.code
+                case 'ETIMEDOUT':
+                case 'ECONNRESET':
+                case 'EPIPE':
+                    if (oTimeout) clearTimeout(oTimeout);
+                    oTimeout = setTimeout(function() {
+                        client.destroy();
+                        client.connect(4000, ip);
+                    }, 3000);
+                    break;
+            };
         });
         client.connect(4000, ip, function() {
             clearTimeout(connectTimer);
@@ -139,6 +152,7 @@ function start(ip, onError, debug) {
         });
     });
 }
+
 function responseProcesser(data, status_len, single_result_cb) {
     var fail = data.readUInt8(8);
     if(fail) {
@@ -173,9 +187,11 @@ function successResponseProcesser(cmd, data) {
     }
 }
 
+var _devices = {};
+
 function discovery() {
     return sendCommand(COMMAND_LIST_ALL_NODE, new Buffer([0x1]), function(data, pos) {
-        return {
+        var o = {
             id: data.readUInt16LE(pos),
             mac: data.readDoubleLE(pos + 2, 8),
             type: data.readUInt8(pos + 10),
@@ -191,6 +207,8 @@ function discovery() {
             alpha: data.readUInt8(pos + 25),
             name: data.getOurUTF8String(pos + 26, pos + 50)
         };
+        _devices[o.mac] = { type: o.type};
+        return o;
     });
 }
 
@@ -261,13 +279,15 @@ function get_status(mac) {
             o.blue = data.readUInt8(27);
             o.alpha = data.readUInt8(28);
         }
+        if (_devices[o.mac]) o.type = _devices[o.mac].type;
         return o;
     });
 }
 
 function close() {
     if (client) {
-        client.close();
+        //client.close();
+        client.destroy();
         client = null;
     }
 }
@@ -331,5 +351,15 @@ var exports = module.exports = {
     isBrightnessSupported : function(type) { return getNodeType(type) === 2 || getNodeType(type) === 4 || (getNodeType(type) != 16 && getNodeType(type) != 1);},
     isTemperatureSupported : function(type) {return getNodeType(type) === 2 || getNodeType(type) === 10; },
     isColorSupported : function(type) { return getNodeType(type) === 10 || getNodeType(type) === 8; },
-    isLight : function(type) { return !isSwitch(type) && !isPlug(type); }
+    isLight : function(type) { return !isSwitch(type) && !isPlug(type); },
+    tf: {
+        BRI: 0xae, // ((~FT_SWITCH) & (~FT_PLUG)) & 0xff, //0xffee,
+        CT: 0x02,
+        RGB: 0x08,
+        SWITCH: 0x40,
+        PLUG: 0x10,
+        ALL: 0xff,
+        LIGHT: 0xae
+    }
 };
+
