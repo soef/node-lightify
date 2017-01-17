@@ -33,11 +33,11 @@ function defaultBuffer(mac, len)  {
     if(len == undefined) len = 9;
     var body = new Buffer(len);
     body.fill(0);
-	if (typeof mac == 'string') {
-		body.write(mac.substr(0, 16), 0, 'hex');
-	} else {
-		body.writeDoubleLE(mac, 0);
-	}
+    if (typeof mac == 'string') {
+        body.write(mac.substr(0, 16), 0, 'hex');
+    } else {
+        body.writeDoubleLE(mac, 0);
+    }
     return body;
 }
 
@@ -45,33 +45,33 @@ function defaultBuffer(mac, len)  {
 var seq = 0;
 
 var lightify = function(ip) {
-	this.ip = ip;
-	this.commands = [];
+    this.ip = ip;
+    this.commands = [];
 }
 lightify.prototype.processData = function(cmd, data) {
-	var fail = data.readUInt8(8);
-	if(fail) {
-		return cmd.reject({
-			cmd : cmd,
-			fail : fail,
-			response : data.toString('hex')
-		});
-	}
-	var num = data.readUInt16LE(9);
-	var result = { result: [] };
-	var statusLen = num && (data.length - 11) / num;
-	for (var i = 0; i < num; i++) {
-		var pos = 11 + i * statusLen;
-		result.result.push(cmd.cb(data, pos));
-	}
-	result.request = cmd.request;
-	result.response = data.toString('hex');
-	cmd.resolve(result);
+    var fail = data.readUInt8(8);
+    if(fail) {
+        return cmd.reject({
+            cmd : cmd,
+            fail : fail,
+            response : data.toString('hex')
+        });
+    }
+    var num = data.readUInt16LE(9);
+    var result = { result: [] };
+    var statusLen = num && (data.length - 11) / num;
+    for (var i = 0; i < num; i++) {
+        var pos = 11 + i * statusLen;
+        result.result.push(cmd.cb(data, pos));
+    }
+    result.request = cmd.request;
+    result.response = data.toString('hex');
+    cmd.resolve(result);
 }
 lightify.prototype.connect = function() {
-	var self = this;
-	
-	return new Promise(function(resolve, reject) {
+    var self = this;
+
+    return new Promise(function(resolve, reject) {
         self.client = new net.Socket();
         self.connectTimeout = setTimeout(function () {
             reject('timeout');
@@ -81,77 +81,81 @@ lightify.prototype.connect = function() {
             var seq = data.readUInt32LE(4);
             for(var i = 0; i < self.commands.length; i++) {
                 if(self.commands[i].seq === seq) {
-					self.processData(self.commands[i], data)
+                    clearTimeout(self.commands[i].timer);
+                    self.processData(self.commands[i], data)
                     self.commands.splice(i, 1);
                     break;
                 }
             }
         });
         self.client.on('error', function(error) {
-			for(var i = 0; i < self.commands.length; i++) {
-				self.commands[i].reject(error);
-			}
+            for(var i = 0; i < self.commands.length; i++) {
+                self.commands[i].reject(error);
+            }
         });
         self.client.connect(4000, self.ip, function() {
-            clearTimeout(self.connectTimeout);			
-			resolve();
+            clearTimeout(self.connectTimeout);
+            resolve();
         });
     });
 }
 lightify.prototype.dispose = function () {
-	this.client.destroy();
+    this.client.destroy();
 }
 lightify.prototype.sendCommand = function(cmdId, body, flag, cb) {
-	var self = this;
+    var self = this;
     if (typeof flag == 'function') { cb = flag; flag = 0; }
     return new Promise(function(resolve, reject) {
-		var buffer = new Buffer(8 + body.length);
+        var buffer = new Buffer(8 + body.length);
 
-		buffer.fill(0);
-		buffer.writeUInt16LE(8 + body.length - 2, 0);// length
-		buffer.writeUInt8(flag || 0x00, 2);          // Flag, 0:node, 2:zone
-		buffer.writeUInt8(cmdId, 3);                   // command
-		buffer.writeUInt32LE(++seq, 4);              // request id
-		body.copy(buffer, 8);
-		var cmd = {
-			seq : seq,
-			createTime : moment().format('x'),
-			resolve : resolve,
-			reject : reject,
-			cb :(cb || function(data, pos) {
-				return {
-					mac : data.readDoubleLE(pos, 8),
-					friendlyMac : data.toString('hex', pos, pos + 8),
-					success : data.readUInt8(pos + 8)
-				};
-			}),
-			request : buffer.toString('hex')
-		};
+        buffer.fill(0);
+        buffer.writeUInt16LE(8 + body.length - 2, 0);// length
+        buffer.writeUInt8(flag || 0x00, 2);          // Flag, 0:node, 2:zone
+        buffer.writeUInt8(cmdId, 3);                   // command
+        buffer.writeUInt32LE(++seq, 4);              // request id
+        body.copy(buffer, 8);
+        var cmd = {
+            seq : seq,
+            createTime : moment().format('x'),
+            resolve : resolve,
+            reject : reject,
+            cb :(cb || function(data, pos) {
+                return {
+                    mac : data.readDoubleLE(pos, 8),
+                    friendlyMac : data.toString('hex', pos, pos + 8),
+                    success : data.readUInt8(pos + 8)
+                };
+            }),
+            request : buffer.toString('hex'),
+            timer : setTimeout(function() {
+                reject('timeout');
+            }, 1000)
+        };
         self.commands.push(cmd);
-		self.client.write(buffer);
+        self.client.write(buffer);
     });
 }
 
 lightify.prototype.discover = function() {
-	var self = this;
+    var self = this;
     return this.sendCommand(COMMAND_LIST_ALL_NODE, new Buffer([0x1]), function(data, pos) {
         return {
-			id: data.readUInt16LE(pos),
-			mac: data.readDoubleLE(pos + 2, 8),
-			friendlyMac : data.toString('hex', pos + 2, pos + 10),
-			type: data.readUInt8(pos + 10),
-			firmware_version: data.readUInt32BE(pos + 11),
-			online: data.readUInt8(pos + 15),
-			groupid: data.readUInt16LE(pos + 16),
-			status: data.readUInt8(pos + 18), // 0 == off, 1 == on
-			brightness: data.readUInt8(pos + 19),
-			temperature: data.readUInt16LE(pos + 20),
-			red: data.readUInt8(pos + 22),
-			green: data.readUInt8(pos + 23),
-			blue: data.readUInt8(pos + 24),
-			alpha: data.readUInt8(pos + 25),
-			name: data.getOurUTF8String(pos + 26, pos + 50)
-		};
+            id: data.readUInt16LE(pos),
+            mac: data.readDoubleLE(pos + 2, 8),
+            friendlyMac : data.toString('hex', pos + 2, pos + 10),
+            type: data.readUInt8(pos + 10),
+            firmware_version: data.readUInt32BE(pos + 11),
+            online: data.readUInt8(pos + 15),
+            groupid: data.readUInt16LE(pos + 16),
+            status: data.readUInt8(pos + 18), // 0 == off, 1 == on
+            brightness: data.readUInt8(pos + 19),
+            temperature: data.readUInt16LE(pos + 20),
+            red: data.readUInt8(pos + 22),
+            green: data.readUInt8(pos + 23),
+            blue: data.readUInt8(pos + 24),
+            alpha: data.readUInt8(pos + 25),
+            name: data.getOurUTF8String(pos + 26, pos + 50)
+        };
     });
 }
 
@@ -164,48 +168,48 @@ lightify.prototype.discoverZone = function() {
     });
 }
 lightify.prototype.nodeOnOff = function(mac, on) {
-	var body = defaultBuffer(mac);
+    var body = defaultBuffer(mac);
     body.writeUInt8(on ? 1 : 0, 8);
     return this.sendCommand(COMMAND_ONOFF, body);
 }
 lightify.prototype.nodeSoftOnOff = function(mac, on, transitiontime) {
-	var body = defaultBuffer(mac, 10);
+    var body = defaultBuffer(mac, 10);
     body.writeUInt16LE(transitiontime || 0, 8);
     return this.sendCommand (on ? COMMAND_SOFT_ON : COMMAND_SOFT_OFF, body);
 }
 lightify.prototype.activateScene = function(sceneId) {
-	var body = new Buffer(2);
+    var body = new Buffer(2);
     body.writeUInt8(sceneId, 0);
     body.writeUInt8(0, 1);
     return this.sendCommand (COMMAND_ACTIVATE_SCENE, body);
 }
 lightify.prototype.getZoneInfo = function(zone) {
-	var body = new Buffer(2);
+    var body = new Buffer(2);
     body.writeUInt8(zone, 0);
     body.writeUInt8(0, 1);
     return this.sendCommand (COMMAND_GET_ZONE_INFO, body, 2,
-	    function(data, pos) {
-			var o = {
-				groupNo: data.readUInt8(9),
-				name: data.getOurUTF8String(11, 26),
-				devices: []
-			}
-			var cnt = data.readUInt8(27);
-			for (var i=28; i<data.length; i+=8) {
-				o.devices.push({
-					mac : data.readDoubleLE(i, 8),
-					friendlyMac : data.toString('hex', i, i + 8),
-				});
-			}
-			return o;
-		}
-	);
+        function(data, pos) {
+            var o = {
+                groupNo: data.readUInt8(9),
+                name: data.getOurUTF8String(11, 26),
+                devices: []
+            }
+            var cnt = data.readUInt8(27);
+            for (var i=28; i<data.length; i+=8) {
+                o.devices.push({
+                    mac : data.readDoubleLE(i, 8),
+                    friendlyMac : data.toString('hex', i, i + 8),
+                });
+            }
+            return o;
+        }
+    );
 }
 lightify.prototype.getStatus = function(mac) {
-	var self = this;
-	var body = defaultBuffer(mac, 8);
-	return this.sendCommand(COMMAND_GET_STATUS, body, function(data, pos) {
-		var o = {
+    var self = this;
+    var body = defaultBuffer(mac, 8);
+    return this.sendCommand(COMMAND_GET_STATUS, body, function(data, pos) {
+        var o = {
             mac: data.readDoubleLE(11, 8),
             requestStatus: data.readUInt8(19),
             online: 0
@@ -222,11 +226,11 @@ lightify.prototype.getStatus = function(mac) {
         }
         return o;
     }).then(function(device) {
-		return Promise.resolve(device.result.length && device.result[0]);
-	});
+        return Promise.resolve(device.result.length && device.result[0]);
+    });
 }
 lightify.prototype.nodeBrightness = function(mac, brightness, stepTime) {
-	var buffer = defaultBuffer(mac, 11);
+    var buffer = defaultBuffer(mac, 11);
     buffer.writeUInt8(brightness, 8);
     buffer.writeUInt16LE(stepTime || 0, 9);
     return this.sendCommand(COMMAND_BRIGHTNESS, buffer);
