@@ -44,13 +44,14 @@ function defaultBuffer(mac, len)  {
 
 var seq = 0;
 
-var lightify = function(ip) {
+var lightify = function(ip, logger) {
     this.ip = ip;
     this.commands = [];
+    this.logger = logger;
 }
 lightify.prototype.processData = function(cmd, data) {
     var fail = data.readUInt8(8);
-    if(fail) {
+    if(fail && cmd.reject) {
         return cmd.reject({
             cmd : cmd,
             fail : fail,
@@ -66,7 +67,9 @@ lightify.prototype.processData = function(cmd, data) {
     }
     result.request = cmd.request;
     result.response = data.toString('hex');
-    cmd.resolve(result);
+    if (cmd.resolve) {
+        cmd.resolve(result);
+    }
 }
 lightify.prototype.connect = function() {
     var self = this;
@@ -74,14 +77,17 @@ lightify.prototype.connect = function() {
     return new Promise(function(resolve, reject) {
         self.client = new net.Socket();
         self.connectTimeout = setTimeout(function () {
-            reject('timeout');
+            reject('connect timeout');
+            self.logger && self.logger.debug('can not connect to lightify bridge, timeout');
             self.client.destroy();
-        }, 1000);
+        }, 4000);
         self.client.on('data', function(data) {
             var seq = data.readUInt32LE(4);
+            self.logger && self.logger.debug('get response for seq [%s][%s]', seq, data.toString('hex'));
             for(var i = 0; i < self.commands.length; i++) {
                 if(self.commands[i].seq === seq) {
                     clearTimeout(self.commands[i].timer);
+                    self.logger && self.logger.debug('found request');
                     self.processData(self.commands[i], data)
                     self.commands.splice(i, 1);
                     break;
@@ -89,9 +95,11 @@ lightify.prototype.connect = function() {
             }
         });
         self.client.on('error', function(error) {
+            self.logger && self.logger.debug('connection has error', error);
             for(var i = 0; i < self.commands.length; i++) {
                 self.commands[i].reject(error);
             }
+            self.dispose();
         });
         self.client.connect(4000, self.ip, function() {
             clearTimeout(self.connectTimeout);
@@ -100,6 +108,7 @@ lightify.prototype.connect = function() {
     });
 }
 lightify.prototype.dispose = function () {
+    this.commands = [];
     this.client.destroy();
 }
 lightify.prototype.sendCommand = function(cmdId, body, flag, cb) {
@@ -126,11 +135,15 @@ lightify.prototype.sendCommand = function(cmdId, body, flag, cb) {
                     success : data.readUInt8(pos + 8)
                 };
             }),
-            request : buffer.toString('hex'),
-            timer : setTimeout(function() {
-                reject('timeout');
-            }, 1000)
+            request : buffer.toString('hex')
         };
+        cmd.timer = setTimeout(function() {
+            self.logger && self.logger.debug('send command timeout [%s][%s]', cmd.seq, buffer.toString('hex'));
+            cmd.reject('timeout');
+            cmd.resolve = undefined;
+            cmd.reject = undefined;
+        }, 1000);
+        self.logger && self.logger.debug('command sent [%s][%s]', cmd.seq, buffer.toString('hex'));
         self.commands.push(cmd);
         self.client.write(buffer);
     });
