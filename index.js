@@ -82,6 +82,18 @@ lightify.prototype.connect = function() {
             self.client.destroy();
         }, 4000);
         self.client.on('data', function(data) {
+            if(self.readBuffer && self.readBuffer.length) {
+                data = Buffer.concat([self.readBuffer, data], self.readBuffer.length + data.length);
+            }
+            var expectLen = data.readUInt16LE(0) + 2;
+            if(expectLen > data.length) {
+                self.readBuffer = new Buffer(data);
+                return;
+            } else if(expectLen === data.length){
+                self.readBuffer = undefined;
+            } else {
+                self.readBuffer = new Buffer(data, data.length - expectLen);
+            }
             var seq = data.readUInt32LE(4);
             self.logger && self.logger.debug('get response for seq [%s][%s]', seq, data.toString('hex'));
             for(var i = 0; i < self.commands.length; i++) {
@@ -169,7 +181,7 @@ lightify.prototype.discover = function() {
             alpha: data.readUInt8(pos + 25),
             name: data.getOurUTF8String(pos + 26, pos + 50)
         };
-    });
+    }, 50);
 }
 
 lightify.prototype.discoverZone = function() {
