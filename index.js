@@ -60,9 +60,9 @@ lightify.prototype.processData = function(cmd, data) {
     }
     var num = data.readUInt16LE(9);
     var result = { result: [] };
-    var statusLen = num && (data.length - 11) / num;
+    var packageSize = cmd.packageSize || (num && (data.length - 11) / num);
     for (var i = 0; i < num; i++) {
-        var pos = 11 + i * statusLen;
+        var pos = 11 + i * packageSize;
         result.result.push(cmd.cb(data, pos));
     }
     result.request = cmd.request;
@@ -82,20 +82,23 @@ lightify.prototype.connect = function() {
             self.client.destroy();
         }, 4000);
         self.client.on('data', function(data) {
+            self.logger && self.logger.debug('socket data: [%s]', data.toString('hex'))
             if(self.readBuffer && self.readBuffer.length) {
-                data = Buffer.concat([self.readBuffer, data], self.readBuffer.length + data.length);
+                data = Buffer.concat([self.readBuffer, data]);
             }
-            var expectLen = data.readUInt16LE(0) + 2;
-            if(expectLen > data.length) {
+            var expectedLen = data.readUInt16LE(0) + 2;
+            self.logger && self.logger.debug('Expected len [%s]', expectedLen);
+            self.logger && self.logger.debug('len = [%s]', data.length);
+            if(expectedLen > data.length) {
                 self.readBuffer = new Buffer(data);
                 return;
-            } else if(expectLen === data.length){
+            } else if(expectedLen === data.length){
                 self.readBuffer = undefined;
             } else {
-                self.readBuffer = new Buffer(data, data.length - expectLen);
+                self.readBuffer = new Buffer(data.slice(data.length - expectedLen));
             }
             var seq = data.readUInt32LE(4);
-            self.logger && self.logger.debug('get response for seq [%s][%s]', seq, data.toString('hex'));
+            self.logger && self.logger.debug('got response for seq [%s][%s]', seq, data.toString('hex'));
             for(var i = 0; i < self.commands.length; i++) {
                 if(self.commands[i].seq === seq) {
                     clearTimeout(self.commands[i].timer);
@@ -123,7 +126,7 @@ lightify.prototype.dispose = function () {
     this.commands = [];
     this.client.destroy();
 }
-lightify.prototype.sendCommand = function(cmdId, body, flag, cb) {
+lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
     var self = this;
     if (typeof flag == 'function') { cb = flag; flag = 0; }
     return new Promise(function(resolve, reject) {
@@ -140,6 +143,7 @@ lightify.prototype.sendCommand = function(cmdId, body, flag, cb) {
             createTime : moment().format('x'),
             resolve : resolve,
             reject : reject,
+            packageSize : packageSize,
             cb :(cb || function(data, pos) {
                 return {
                     mac : data.readDoubleLE(pos, 8),
