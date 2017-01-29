@@ -286,6 +286,9 @@ lightify.prototype.nodeColor = function(mac, red, green, blue, alpha, stepTime) 
 function isPlug(type) {
     return type === 16;
 }
+function isSensor(type) {
+    return type === 32;
+}
 function getNodeType(type) {
     return isPlug(type) ? 16 : type;
 }
@@ -296,12 +299,13 @@ var exports = module.exports = {
     lightify : lightify,
     isPlug : isPlug,
     isSwitch : isSwitch,
+    isSensor : isSensor,
     is2BSwitch : function(type) { return type === 64;},
     is4BSwitch : function(type) { return type === 65;},
     isBrightnessSupported : function(type) { return getNodeType(type) === 2 || getNodeType(type) === 4 || (getNodeType(type) != 16 && getNodeType(type) != 1);},
     isTemperatureSupported : function(type) {return getNodeType(type) === 2 || getNodeType(type) === 10; },
     isColorSupported : function(type) { return getNodeType(type) === 10 || getNodeType(type) === 8; },
-    isLight : function(type) { return !isSwitch(type) && !isPlug(type); },
+    isLight : function(type) { return !isSwitch(type) && !isPlug(type) && !isSensor(type); },
     tf: {
         BRI: 0xae, // ((~FT_SWITCH) & (~FT_PLUG)) & 0xff, //0xffee,
         CT: 0x02,
