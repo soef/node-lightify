@@ -16,10 +16,10 @@ $ npm install node-lightify
 ## Usage
 
 ```javascript
-var lightify = require('lightify');
+var lightify = require('node-lightify');
 var connection = new lightify.lightify('x.x.x.x');
-connection.connect('x.x.x.x').then(function(){
-    return o.discover();
+connection.connect().then(function(){
+    return connection.discover();
 }).then(function(data) {
     console.log(data.result);
 	connection.dispose();
