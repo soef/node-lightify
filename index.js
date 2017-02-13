@@ -112,7 +112,9 @@ lightify.prototype.connect = function() {
         self.client.on('error', function(error) {
             self.logger && self.logger.debug('connection has error', error);
             for(var i = 0; i < self.commands.length; i++) {
-                self.commands[i].reject(error);
+                if(self.commands[i] && self.commands[i].reject) {
+                    self.commands[i].reject(error);
+                }
             }
             self.dispose();
         });
