@@ -41,7 +41,11 @@ function defaultBuffer(mac, len)  {
     return body;
 }
 
-
+function isBigEndian() {
+    var a = new Uint32Array([0x12345678]);
+    var b = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+    return (b[0] == 0x12);
+}
 var seq = 0;
 
 var lightify = function(ip, logger) {
@@ -192,16 +196,21 @@ lightify.prototype.discover = function() {
 
 lightify.prototype.discoverZone = function() {
     return this.sendCommand(COMMAND_LIST_ALL_ZONE, new Buffer([0x0]), 2, function(data, pos) {
+        var id = data.readUInt16LE(pos);
+        var buffer = new Buffer(8);
+        buffer.fill(0);
+        buffer.writeUInt16LE(id, 0);
         return {
-            id: data.readUInt16LE(pos),
+            id : id,
+            mac : buffer.readDoubleLE(0), // use id as mac
             name: data.getOurUTF8String(pos + 2, pos + 18)
         };
     });
 }
-lightify.prototype.nodeOnOff = function(mac, on) {
+lightify.prototype.nodeOnOff = function(mac, on, isGroup) {
     var body = defaultBuffer(mac);
     body.writeUInt8(on ? 1 : 0, 8);
-    return this.sendCommand(COMMAND_ONOFF, body);
+    return this.sendCommand(COMMAND_ONOFF, body, isGroup ? 0x2 : 0);
 }
 lightify.prototype.nodeSoftOnOff = function(mac, on, transitiontime) {
     var body = defaultBuffer(mac, 10);
@@ -216,21 +225,18 @@ lightify.prototype.activateScene = function(sceneId) {
 }
 lightify.prototype.getZoneInfo = function(zone) {
     var body = new Buffer(2);
-    body.writeUInt8(zone, 0);
-    body.writeUInt8(0, 1);
+    body.writeUInt16LE(zone, 0);
     return this.sendCommand (COMMAND_GET_ZONE_INFO, body, 2,
         function(data, pos) {
             var o = {
-                groupNo: data.readUInt8(9),
-                name: data.getOurUTF8String(11, 26),
+                groupNo: zone,
+                name: data.getOurUTF8String(pos, pos + 15),
                 devices: []
             }
-            var cnt = data.readUInt8(27);
-            for (var i=28; i<data.length; i+=8) {
-                o.devices.push({
-                    mac : data.readDoubleLE(i, 8),
-                    friendlyMac : data.toString('hex', i, i + 8),
-                });
+            var cnt = data.readUInt8(pos + 16);
+            for (var i= 0; i < cnt; i++) {
+                var ipos = pos + 17 + i * 8;
+                o.devices.push(data.readDoubleLE(ipos, 8));
             }
             return o;
         }
@@ -283,39 +289,51 @@ lightify.prototype.nodeColor = function(mac, red, green, blue, alpha, stepTime) 
 
     return this.sendCommand(COMMAND_COLOR, buffer);
 }
-
-
-function isPlug(type) {
-    return type === 16;
-}
-function isSensor(type) {
-    return type === 32;
-}
 function getNodeType(type) {
     return isPlug(type) ? 16 : type;
 }
+
+var tf = {
+    ONOFF_LIGHT : 0x01,
+    COLORTEMP_DIMMABLE_LIGHT : 0x02,
+    DIMMABLE_LIGHT : 0x04,
+    COLOR_LIGHT : 0x08,
+    EXT_COLOR_LIGHT : 0x0A,
+    PLUG: 0x10,
+    SENSOR : 0x20,
+    TWO_BTN_SWITCH : 0x40,
+    FOUR_BTN_SWITCH : 0x41,
+    BRI: 0xae, // ((~FT_SWITCH) & (~FT_PLUG)) & 0xff, //0xffee,
+    ALL: 0xff,
+    LIGHT: 0xae
+};
 function isSwitch(type) {
-    return type === 64 || type === 65;
+    return type === tf.TWO_BTN_SWITCH || type === tf.FOUR_BTN_SWITCH;
+}
+function isPlug(type) {
+    return type === tf.PLUG;
+}
+function isSensor(type) {
+    return type === tf.SENSOR;
 }
 var exports = module.exports = {
     lightify : lightify,
     isPlug : isPlug,
     isSwitch : isSwitch,
     isSensor : isSensor,
-    is2BSwitch : function(type) { return type === 64;},
-    is4BSwitch : function(type) { return type === 65;},
-    isBrightnessSupported : function(type) { return getNodeType(type) === 2 || getNodeType(type) === 4 || (getNodeType(type) != 16 && getNodeType(type) != 1);},
-    isTemperatureSupported : function(type) {return getNodeType(type) === 2 || getNodeType(type) === 10; },
-    isColorSupported : function(type) { return getNodeType(type) === 10 || getNodeType(type) === 8; },
+    is2BSwitch : function(type) { return type === tf.TWO_BTN_SWITCH;},
+    is4BSwitch : function(type) { return type === tf.FOUR_BTN_SWITCH;},
+    isBrightnessSupported : function(type) {
+        return getNodeType(type) === tf.COLORTEMP_DIMMABLE_LIGHT ||
+            getNodeType(type) === tf.DIMMABLE_LIGHT ||
+            (!isPlug(type) && getNodeType(type) != tf.ONOFF_LIGHT);
+    },
+    isTemperatureSupported : function(type) {
+        return getNodeType(type) === tf.COLORTEMP_DIMMABLE_LIGHT ||
+            getNodeType(type) === tf.EXT_COLOR_LIGHT; },
+    isColorSupported : function(type) {
+        return getNodeType(type) === tf.EXT_COLOR_LIGHT ||
+            getNodeType(type) === tf.COLOR_LIGHT; },
     isLight : function(type) { return !isSwitch(type) && !isPlug(type) && !isSensor(type); },
-    tf: {
-        BRI: 0xae, // ((~FT_SWITCH) & (~FT_PLUG)) & 0xff, //0xffee,
-        CT: 0x02,
-        RGB: 0x08,
-        SWITCH: 0x40,
-        PLUG: 0x10,
-        ALL: 0xff,
-        LIGHT: 0xae
-    }
+    tf: tf
 };
-
