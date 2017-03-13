@@ -135,10 +135,21 @@ lightify.prototype.onError = function (error) {
         }
     }
     self.dispose();
-}; 
+};
+
+lightify.prototype.isGroupCommand = function (cmdId, body) {
+    if (groupCommands.indexOf(cmdId) >= 0) {
+        // group ids = group number + 7 x 0, so if the bytes 1..8 are 0, it is a group id.
+        for (var i = 1; i < 8 && body[i] == 0; i++);
+        if (i==8) return 2;
+    }
+    return 0;
+}
+
 lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
     var self = this;
-    if (typeof flag == 'function') { cb = flag; flag = 0; }
+    if (typeof flag == 'function') { cb = flag; flag = undefined; }
+    if (flag === undefined) flag = this.isGroupCommand(cmdId, body);
     return new Promise(function(resolve, reject) {
         var buffer = new Buffer(8 + body.length);
 
@@ -214,7 +225,7 @@ lightify.prototype.discoverZone = function() {
 lightify.prototype.nodeOnOff = function(mac, on, isGroup) {
     var body = defaultBuffer(mac);
     body.writeUInt8(on ? 1 : 0, 8);
-    return this.sendCommand(COMMAND_ONOFF, body, isGroup ? 0x2 : 0);
+    return this.sendCommand(COMMAND_ONOFF, body, isGroup !== undefined ? isGroup ? 0x2 : 0 : undefined);
 }
 lightify.prototype.nodeSoftOnOff = function(mac, on, transitiontime) {
     var body = defaultBuffer(mac, 10);
