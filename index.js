@@ -16,13 +16,13 @@ const
     COMMAND_GET_STATUS = 0x68,
     COMMAND_ACTIVATE_SCENE = 0x52;
 
-var groupCommands = [
-    COMMAND_BRIGHTNESS,
-    COMMAND_ONOFF,
-    COMMAND_TEMP,
-    COMMAND_COLOR,
-    COMMAND_GET_STATUS
-]
+// var groupCommands = [
+//     COMMAND_BRIGHTNESS,
+//     COMMAND_ONOFF,
+//     COMMAND_TEMP,
+//     COMMAND_COLOR,
+//     COMMAND_GET_STATUS
+// ]
 
 Buffer.prototype.getOurUTF8String = function (start, end) {
     for (var i=start; i<end && this[i]!==0; i++) {}
@@ -52,7 +52,15 @@ var lightify = function(ip, logger) {
     this.ip = ip;
     this.commands = [];
     this.logger = logger;
-}
+    
+    this.groupCommands = [
+        COMMAND_BRIGHTNESS,
+        COMMAND_ONOFF,
+        COMMAND_TEMP,
+        COMMAND_COLOR,
+        COMMAND_GET_STATUS
+    ];
+};
 lightify.prototype.processData = function(cmd, data) {
     var fail = data.readUInt8(8);
     if(fail && cmd.reject) {
@@ -74,7 +82,7 @@ lightify.prototype.processData = function(cmd, data) {
     if (cmd.resolve) {
         cmd.resolve(result);
     }
-}
+};
 lightify.prototype.connect = function() {
     var self = this;
 
@@ -138,13 +146,13 @@ lightify.prototype.onError = function (error) {
 };
 
 lightify.prototype.isGroupCommand = function (cmdId, body) {
-    if (groupCommands.indexOf(cmdId) >= 0) {
-        // group ids = group number + 7 x 0, so if the bytes 1..8 are 0, it is a group id.
-        for (var i = 1; i < 8 && body[i] == 0; i++);
-        if (i==8) return 2;
+    if (this.groupCommands.indexOf(cmdId) >= 0) {
+        // in case mac was not a string (in your case the group-id). Otherwise this function is overwritable
+        for (var i = 0; i < 7 && body[i] == 0; i++);
+        if (i==6) return 2;
     }
     return 0;
-}
+};
 
 lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
     var self = this;
