@@ -1,6 +1,6 @@
 {
-  "name": "node-lightify-soef",
-  "version": "0.0.11",
+  "name": "node-lightify",
+  "version": "2.0.9",
   "description": "lightify node module",
   "license": "BSD",
   "keywords": [
@@ -10,11 +10,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/soef/node-lightify.git",
-    "forkedfrom": "git://github.com/rainlake/node-lightify.git"
+    "url": "git://github.com/rainlake/node-lightify.git"
   },
   "bugs": {
-    "url": "https://github.com/soef/node-lightify/issues"
+    "url": "https://github.com/rainlake/node-lightify/issues"
   },
   "engines": {
     "node": ">=0.12.0"
