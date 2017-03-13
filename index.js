@@ -114,13 +114,7 @@ lightify.prototype.connect = function() {
             }
         });
         self.client.on('error', function(error) {
-            self.logger && self.logger.debug('connection has error', error);
-            for(var i = 0; i < self.commands.length; i++) {
-                if(self.commands[i] && self.commands[i].reject) {
-                    self.commands[i].reject(error);
-                }
-            }
-            self.dispose();
+            self.onError();
         });
         self.client.connect(4000, self.ip, function() {
             clearTimeout(self.connectTimeout);
@@ -132,6 +126,16 @@ lightify.prototype.dispose = function () {
     this.commands = [];
     this.client.destroy();
 }
+lightify.prototype.onError = function (error) {
+    var self = this;
+    self.logger && self.logger.debug('connection has error', error);
+    for(var i = 0; i < self.commands.length; i++) {
+        if(self.commands[i] && self.commands[i].reject) {
+            self.commands[i].reject(error);
+        }
+    }
+    self.dispose();
+}; 
 lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
     var self = this;
     if (typeof flag == 'function') { cb = flag; flag = 0; }
