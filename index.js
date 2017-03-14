@@ -29,6 +29,19 @@ Buffer.prototype.getOurUTF8String = function (start, end) {
     return this.toString('utf-8', start, i);
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// use this to get & set the mac-value as hex string
+/*
+Buffer.prototype.writeDoubleLE1 = function (val, pos) {
+    return this.write(val.toLowerCase(), 0, 8, 'hex');
+};
+Buffer.prototype.readDoubleLE1 = function (pos, len) {
+    return this.toString('hex', pos, pos+len).toUpperCase();
+};
+*/
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 function defaultBuffer(mac, len)  {
     if(len == undefined) len = 9;
     var body = new Buffer(len);
@@ -82,7 +95,8 @@ lightify.prototype.processData = function(cmd, data) {
     if (cmd.resolve) {
         cmd.resolve(result);
     }
-};
+}
+
 lightify.prototype.connect = function() {
     var self = this;
 
@@ -102,24 +116,14 @@ lightify.prototype.connect = function() {
             self.logger && self.logger.debug('Expected len [%s]', expectedLen);
             self.logger && self.logger.debug('len = [%s]', data.length);
             if(expectedLen > data.length) {
-                self.readBuffer = new Buffer(data);
+                self.readBuffer = new Buffer(data); // I think you can use data directly (without new Buffer())
                 return;
             } else if(expectedLen === data.length){
                 self.readBuffer = undefined;
             } else {
                 self.readBuffer = new Buffer(data.slice(data.length - expectedLen));
             }
-            var seq = data.readUInt32LE(4);
-            self.logger && self.logger.debug('got response for seq [%s][%s]', seq, data.toString('hex'));
-            for(var i = 0; i < self.commands.length; i++) {
-                if(self.commands[i].seq === seq) {
-                    clearTimeout(self.commands[i].timer);
-                    self.logger && self.logger.debug('found request');
-                    self.processData(self.commands[i], data)
-                    self.commands.splice(i, 1);
-                    break;
-                }
-            }
+            self.onData(data);
         });
         self.client.on('error', function(error) {
             self.onError();
@@ -129,20 +133,40 @@ lightify.prototype.connect = function() {
             resolve();
         });
     });
-}
+};
+
+lightify.prototype.onData = function (data) {
+    var seq = data.readUInt32LE(4);
+    this.logger && this.logger.debug('got response for seq [%s][%s]', seq, data.toString('hex'));
+    for(var i = 0; i < this.commands.length; i++) {
+        if(this.commands[i].seq === seq) {
+            clearTimeout(this.commands[i].timer);
+            this.logger && this.logger.debug('found request');
+            this.processData(this.commands[i], data)
+            this.commands.splice(i, 1);
+            this.sendNextRequest();
+            break;
+        }
+    }
+};
+
 lightify.prototype.dispose = function () {
     this.commands = [];
     this.client.destroy();
-}
+};
+
 lightify.prototype.onError = function (error) {
-    var self = this;
-    self.logger && self.logger.debug('connection has error', error);
-    for(var i = 0; i < self.commands.length; i++) {
-        if(self.commands[i] && self.commands[i].reject) {
-            self.commands[i].reject(error);
+    this.logger && this.logger.debug('connection has error', error);
+    for(var i = 0; i < this.commands.length; i++) {
+        if(this.commands[i] && this.commands[i].reject) {
+            this.commands[i].reject(error);
         }
     }
-    self.dispose();
+    this.dispose();
+};
+
+lightify.prototype.sendNextRequest = function (buffer) {
+    if (buffer) this.client.write(buffer); // to overwrite it to use serialization
 };
 
 lightify.prototype.isGroupCommand = function (cmdId, body) {
@@ -158,6 +182,7 @@ lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
     var self = this;
     if (typeof flag == 'function') { cb = flag; flag = undefined; }
     if (flag === undefined) flag = this.isGroupCommand(cmdId, body);
+    
     return new Promise(function(resolve, reject) {
         var buffer = new Buffer(8 + body.length);
 
@@ -187,10 +212,12 @@ lightify.prototype.sendCommand = function(cmdId, body, flag, cb, packageSize) {
             cmd.reject('timeout');
             cmd.resolve = undefined;
             cmd.reject = undefined;
+            self.sendNextRequest();
         }, 1000);
         self.logger && self.logger.debug('command sent [%s][%s]', cmd.seq, buffer.toString('hex'));
         self.commands.push(cmd);
-        self.client.write(buffer);
+        self.sendNextRequest(buffer);
+        //self.client.write(buffer);
     });
 }
 
@@ -360,3 +387,5 @@ var exports = module.exports = {
     isLight : function(type) { return !isSwitch(type) && !isPlug(type) && !isSensor(type); },
     tf: tf
 };
+
+
