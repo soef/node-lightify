@@ -73,6 +73,7 @@ var lightify = function(ip, logger) {
         COMMAND_COLOR,
         COMMAND_GET_STATUS
     ];
+    this.connectErrorCount = 0;
 };
 lightify.prototype.processData = function(cmd, data) {
     var fail = data.readUInt8(8);
@@ -153,6 +154,8 @@ lightify.prototype.onData = function (data) {
 lightify.prototype.dispose = function () {
     this.commands = [];
     this.client.destroy();
+    if (this.buffers) this.buffers.length = 0;
+    this.client.connected = undefined;
 };
 
 lightify.prototype.onError = function (error) {
@@ -165,9 +168,103 @@ lightify.prototype.onError = function (error) {
     this.dispose();
 };
 
-lightify.prototype.sendNextRequest = function (buffer) {
+lightify.prototype.setDisconnectTimer = function () {
+    var self = this;
+    
+    var _setTimer = function () {
+        if (self.disconnectTimer) clearTimeout (self.disconnectTimer);
+        self.disconnectTimer = setTimeout (function () {
+            self.disconnectTimer = undefined;
+            if (self.buffers.length) return _setTimer ();
+            self.client.end ();
+            self.client.connected = undefined;
+            self.logger && self.logger.debug ('setDisconnectTimer: client.end() called');
+        }, self.timeToStayConnected);
+    };
+    if (!self.disconnectTimer || !self.buffers.length) _setTimer ();
+};
+
+lightify.prototype.sendNextRequest = lightify.prototype.sendNextRequestNormal = function (buffer) {
     if (buffer) this.client.write(buffer); // to overwrite it to use serialization
 };
+
+lightify.prototype.sendNextRequestAutoClose = function (buffer) {
+    var self = this;
+    var nextTimer;
+    
+    var checkSend = function () {
+        switch (self.client.connected) {
+            case false:
+                break;
+            case true:
+                if (self.buffers.length > 0) {
+                    self.client.write (self.buffers.shift ());
+                    self.logger && self.logger.debug('sendNextRequest: sent buffer done, remaining length=' + self.buffers.length);
+                    if (self.buffers.length) {
+                        if (nextTimer) clearTimeout(nextTimer);
+                        nextTimer = setTimeout (checkSend, 1000);
+                    }
+                }
+                break;
+            case undefined:
+                self.client.connected = false;
+                self.logger && self.logger.debug('sendNextRequest: trying to connect');
+                //self.client.connect (4000, self.ip, function () {
+                self.connectEx(function() {
+                    self.logger && self.logger.debug('sendNextRequest: connected! buffers.length=' + self.buffers.length);
+                    checkSend ();
+                });
+                break;
+        }
+    };
+    
+    if (buffer) {
+        this.buffers = this.buffers || [];
+        self.logger && self.logger.debug('sendNextRequest: push(buffer) length=' + (this.buffers.length+1));
+        this.buffers.push (buffer);
+    } else {
+        if (nextTimer) clearTimeout(nextTimer);
+        nextTimer = undefined;
+        this.setDisconnectTimer();
+    }
+    checkSend();
+};
+
+lightify.prototype.setAutoCloseConnection = function (on) {
+    if (on) {
+        if (this.timeToStayConnected === undefined) this.timeToStayConnected = 3000;
+        this.buffers = this.buffers || [];
+        this.buffers.length = 0;
+        this.prototype.sendNextRequest = this.prototype.sendNextRequestAutoClose;
+    } else {
+        delete this.buffers;
+        this.prototype.sendNextRequest = this.prototype.sendNextRequestNormal;
+    }
+}
+
+lightify.prototype.connectEx = function (cb, errorCb) {
+    var self = this;
+    
+    function func() {
+        self.connectErrorCount = 0;
+        self.client.connected = true;
+        cb && cb();
+    }
+    if (!this.client) { // || this.client.destroyed || !this.client.readable) {
+        return this.connect().then(func).catch(function(error) {
+            if (self.connectErrorCount++ < 5) setTimeout(function() {
+                self.client = undefined;
+                self.connectEx(cb);
+            }, 1000 * self.connectErrorCount);
+            else {
+                errorCb && errorCb('Can not connect to Lightify Gateway ' + self.ip, error);
+                self.logger && self.logger.debug ('Can not connect to Lightify Gateway ' + self.ip);
+            }
+        });
+    }
+    return this.client.connect(4000, self.ip, func);
+};
+
 
 lightify.prototype.isGroupCommand = function (cmdId, body) {
     if (this.groupCommands.indexOf(cmdId) >= 0) {
