@@ -16,14 +16,6 @@ const
     COMMAND_GET_STATUS = 0x68,
     COMMAND_ACTIVATE_SCENE = 0x52;
 
-// var groupCommands = [
-//     COMMAND_BRIGHTNESS,
-//     COMMAND_ONOFF,
-//     COMMAND_TEMP,
-//     COMMAND_COLOR,
-//     COMMAND_GET_STATUS
-// ]
-
 Buffer.prototype.getOurUTF8String = function (start, end) {
     for (var i=start; i<end && this[i]!==0; i++) {}
     return this.toString('utf-8', start, i);
@@ -184,7 +176,7 @@ lightify.prototype.setDisconnectTimer = function () {
     if (!self.disconnectTimer || !self.buffers.length) _setTimer ();
 };
 
-lightify.prototype.sendNextRequest = lightify.prototype.sendNextRequestNormal = function (buffer) {
+lightify.sendNextRequest = lightify.prototype.sendNextRequestNormal = function (buffer) {
     if (buffer) this.client.write(buffer); // to overwrite it to use serialization
 };
 
@@ -235,10 +227,10 @@ lightify.prototype.setAutoCloseConnection = function (on) {
         if (this.timeToStayConnected === undefined) this.timeToStayConnected = 3000;
         this.buffers = this.buffers || [];
         this.buffers.length = 0;
-        this.prototype.sendNextRequest = this.prototype.sendNextRequestAutoClose;
+        this.sendNextRequest = this.sendNextRequestAutoClose;
     } else {
         delete this.buffers;
-        this.prototype.sendNextRequest = this.prototype.sendNextRequestNormal;
+        this.sendNextRequest = this.sendNextRequestNormal;
     }
 }
 
